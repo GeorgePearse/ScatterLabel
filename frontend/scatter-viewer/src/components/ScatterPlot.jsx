@@ -2,12 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import createScatterplot from 'regl-scatterplot';
 import Papa from 'papaparse';
 
-const ScatterPlot = () => {
+const ScatterPlot = ({ onSelectionChange }) => {
   const canvasRef = useRef(null);
   const scatterplotRef = useRef(null);
   const [data, setData] = useState(null);
   const [selectedPoints, setSelectedPoints] = useState([]);
   const [hoveredPoint, setHoveredPoint] = useState(null);
+  const [mouseMode, setMouseMode] = useState('lasso');
 
   useEffect(() => {
     // Load CSV data
@@ -29,7 +30,7 @@ const ScatterPlot = () => {
     if (!canvasRef.current || !data || data.length === 0) return;
 
     // Extract coordinates and prepare points
-    const points = data.map((row, i) => [
+    const points = data.map((row) => [
       parseFloat(row.tsne_x),
       parseFloat(row.tsne_y)
     ]);
@@ -62,7 +63,9 @@ const ScatterPlot = () => {
       lassoMinDelay: 15,
       lassoMinDist: 5,
       showReticle: true,
-      reticleColor: [1, 1, 1, 0.8]
+      reticleColor: [1, 1, 1, 0.8],
+      // Enable lasso selection by default
+      mouseMode: 'lasso'
     });
 
     scatterplotRef.current = scatterplot;
@@ -97,12 +100,18 @@ const ScatterPlot = () => {
     // Handle selection
     const handleSelect = ({ points: selectedIndices }) => {
       setSelectedPoints(selectedIndices);
-      console.log('Selected points:', selectedIndices.map(i => data[i]));
+      const selectedData = selectedIndices.map(i => data[i]);
+      console.log('Selected points:', selectedData);
+      if (onSelectionChange) {
+        onSelectionChange(selectedData);
+      }
     };
 
     scatterplot.subscribe('select', handleSelect);
-    canvasRef.current.addEventListener('mousemove', handleMouseMove);
-    canvasRef.current.addEventListener('mouseleave', () => setHoveredPoint(null));
+    const canvas = canvasRef.current;
+    canvas.addEventListener('mousemove', handleMouseMove);
+    const handleMouseLeave = () => setHoveredPoint(null);
+    canvas.addEventListener('mouseleave', handleMouseLeave);
 
     // Handle window resize
     const handleResize = () => {
@@ -111,18 +120,87 @@ const ScatterPlot = () => {
     };
     window.addEventListener('resize', handleResize);
 
+    // Handle clear selection event
+    const handleClearSelection = () => {
+      scatterplot.select([]);
+      setSelectedPoints([]);
+      if (onSelectionChange) {
+        onSelectionChange([]);
+      }
+    };
+    window.addEventListener('clearSelection', handleClearSelection);
+
     return () => {
       scatterplot.destroy();
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('clearSelection', handleClearSelection);
+      canvas.removeEventListener('mousemove', handleMouseMove);
+      canvas.removeEventListener('mouseleave', handleMouseLeave);
     };
-  }, [data]);
+  }, [data, onSelectionChange]);
+
+  // Update mouse mode when it changes
+  useEffect(() => {
+    if (scatterplotRef.current) {
+      scatterplotRef.current.set({ mouseMode });
+    }
+  }, [mouseMode]);
 
   return (
-    <div style={{ width: '100%', height: '100vh', position: 'relative' }}>
+    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       <canvas 
         ref={canvasRef} 
         style={{ width: '100%', height: '100%' }}
       />
+      
+      {/* Mode toggle buttons */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 20,
+          left: 20,
+          display: 'flex',
+          gap: '10px',
+          zIndex: 1000
+        }}
+      >
+        <button
+          onClick={() => setMouseMode('lasso')}
+          aria-label="Switch to lasso selection mode"
+          aria-pressed={mouseMode === 'lasso'}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: mouseMode === 'lasso' ? '#007bff' : '#e0e0e0',
+            color: mouseMode === 'lasso' ? 'white' : 'black',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: mouseMode === 'lasso' ? 'bold' : 'normal',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          Lasso Select
+        </button>
+        <button
+          onClick={() => setMouseMode('pan')}
+          aria-label="Switch to pan mode"
+          aria-pressed={mouseMode === 'pan'}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: mouseMode === 'pan' ? '#007bff' : '#e0e0e0',
+            color: mouseMode === 'pan' ? 'white' : 'black',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: mouseMode === 'pan' ? 'bold' : 'normal',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          Pan
+        </button>
+      </div>
       
       {/* Tooltip */}
       {hoveredPoint && (
@@ -150,6 +228,7 @@ const ScatterPlot = () => {
 
       {/* Legend */}
       <ClassLegend data={data} />
+
 
       {/* Selection info */}
       {selectedPoints.length > 0 && (
