@@ -1,45 +1,43 @@
 import React, { useState, useEffect } from 'react';
 
-const ImageGrid = ({ selectedData, imageBasePath = '/images' }) => {
+const ImageGrid = ({ selectedData }) => {
   const [loadedImages, setLoadedImages] = useState({});
   const [imageErrors, setImageErrors] = useState({});
   const [imageDimensions, setImageDimensions] = useState({});
 
-  // Group annotations by image_id to avoid duplicate images
-  const groupAnnotationsByImage = (points) => {
-    const grouped = {};
-    points.forEach(point => {
-      if (!grouped[point.image_id]) {
-        grouped[point.image_id] = [];
-      }
-      grouped[point.image_id].push(point);
-    });
-    return grouped;
+  // For CMR crops, each annotation has its own cropped image
+  const prepareCroppedImages = (points) => {
+    // Each point represents a single cropped annotation
+    return points.filter(p => p.cropped_image_path);
   };
 
   // Preload images when selection changes
   useEffect(() => {
-    const imageIds = [...new Set(selectedData.map(p => p.image_id))];
+    // For CMR data, we now have cropped images
+    const imagesToLoad = selectedData.filter(p => p.cropped_image_path);
     
-    imageIds.forEach(imageId => {
-      if (!loadedImages[imageId] && !imageErrors[imageId]) {
+    imagesToLoad.forEach(point => {
+      const imageKey = point.cropped_image_path;
+      if (!loadedImages[imageKey] && !imageErrors[imageKey]) {
         const img = new Image();
         img.onload = () => {
-          setLoadedImages(prev => ({ ...prev, [imageId]: img.src }));
+          setLoadedImages(prev => ({ ...prev, [imageKey]: img.src }));
           setImageDimensions(prev => ({ 
             ...prev, 
-            [imageId]: { width: img.naturalWidth, height: img.naturalHeight } 
+            [imageKey]: { width: img.naturalWidth, height: img.naturalHeight } 
           }));
         };
         img.onerror = () => {
-          setImageErrors(prev => ({ ...prev, [imageId]: true }));
+          setImageErrors(prev => ({ ...prev, [imageKey]: true }));
         };
-        img.src = `${imageBasePath}/${imageId}.jpg`;
+        // Adjust path - remove the 'cmr_crops_sample/' or 'cmr_crops_limited/' prefix
+        const filename = point.cropped_image_path.split('/').pop();
+        img.src = `/cmr_crops/${filename}`;
       }
     });
-  }, [selectedData, imageBasePath, loadedImages, imageErrors]);
+  }, [selectedData, loadedImages, imageErrors]);
 
-  const groupedAnnotations = groupAnnotationsByImage(selectedData);
+  const croppedImages = prepareCroppedImages(selectedData);
 
   if (selectedData.length === 0) {
     return (
@@ -69,136 +67,92 @@ const ImageGrid = ({ selectedData, imageBasePath = '/images' }) => {
         fontWeight: 'bold',
         color: '#333'
       }}>
-        {selectedData.length} annotations across {Object.keys(groupedAnnotations).length} images
+        {croppedImages.length} cropped annotations selected
       </div>
       
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-        gap: '20px'
+        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+        gap: '15px'
       }}>
-        {Object.entries(groupedAnnotations).map(([imageId, annotations]) => (
-          <div
-            key={imageId}
-            style={{
-              backgroundColor: 'white',
-              borderRadius: '8px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-              overflow: 'hidden'
-            }}
-          >
-            <div style={{ position: 'relative' }}>
-              {loadedImages[imageId] ? (
-                <div style={{ position: 'relative' }}>
+        {croppedImages.map((annotation) => {
+          const imageKey = annotation.cropped_image_path;
+          const filename = imageKey.split('/').pop();
+          
+          return (
+            <div
+              key={`${annotation.annotation_id}_${annotation.index}`}
+              style={{
+                backgroundColor: 'white',
+                borderRadius: '8px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                overflow: 'hidden'
+              }}
+            >
+              <div style={{ position: 'relative' }}>
+                {loadedImages[imageKey] ? (
                   <img
-                    src={loadedImages[imageId]}
-                    alt={`Image ${imageId}`}
+                    src={loadedImages[imageKey]}
+                    alt={`${annotation.class_name} crop`}
                     style={{
                       width: '100%',
                       height: 'auto',
                       display: 'block'
                     }}
                   />
-                  
-                  {/* Overlay bounding boxes */}
-                  <svg
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: '100%',
-                      pointerEvents: 'none'
-                    }}
-                    viewBox="0 0 100 100"
-                    preserveAspectRatio="none"
-                  >
-                    {annotations.map((ann) => {
-                      // Normalize coordinates to 0-100 range
-                      const dims = imageDimensions[imageId];
-                      if (!dims) return null;
-                      
-                      const x = (ann.x_min / dims.width) * 100;
-                      const y = (ann.y_min / dims.height) * 100;
-                      const width = ((ann.x_max - ann.x_min) / dims.width) * 100;
-                      const height = ((ann.y_max - ann.y_min) / dims.height) * 100;
-                      
-                      return (
-                        <g key={ann.annotation_id}>
-                          <rect
-                            x={x}
-                            y={y}
-                            width={width}
-                            height={height}
-                            fill="none"
-                            stroke="#00ff00"
-                            strokeWidth="0.5"
-                            opacity="0.8"
-                          />
-                          <text
-                            x={x}
-                            y={y - 1}
-                            fill="#00ff00"
-                            fontSize="3"
-                            fontWeight="bold"
-                          >
-                            {ann.class_name}
-                          </text>
-                        </g>
-                      );
-                    })}
-                  </svg>
-                </div>
-              ) : imageErrors[imageId] ? (
+                ) : imageErrors[imageKey] ? (
+                  <div style={{
+                    height: '150px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: '#f0f0f0',
+                    color: '#666'
+                  }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '20px', marginBottom: '8px' }}>⚠️</div>
+                      <div style={{ fontSize: '12px' }}>Image not found</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{
+                    height: '150px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: '#f0f0f0'
+                  }}>
+                    <div style={{ fontSize: '12px', color: '#666' }}>Loading...</div>
+                  </div>
+                )}
+              </div>
+              
+              <div style={{ padding: '10px' }}>
                 <div style={{
-                  height: '200px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: '#f0f0f0',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  marginBottom: '4px'
+                }}>
+                  {annotation.class_name}
+                </div>
+                <div style={{
+                  fontSize: '11px',
                   color: '#666'
                 }}>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '24px', marginBottom: '8px' }}>⚠️</div>
-                    <div>Image not found</div>
-                    <div style={{ fontSize: '12px', marginTop: '4px' }}>{imageId}</div>
-                  </div>
+                  From: {annotation.image_id}
                 </div>
-              ) : (
                 <div style={{
-                  height: '200px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: '#f0f0f0'
+                  fontSize: '11px',
+                  color: '#888',
+                  marginTop: '2px'
                 }}>
-                  <div style={{ fontSize: '14px', color: '#666' }}>Loading...</div>
+                  Bbox: [{Math.round(annotation.x_min)}, {Math.round(annotation.y_min)}, 
+                        {Math.round(annotation.x_max)}, {Math.round(annotation.y_max)}]
                 </div>
-              )}
-            </div>
-            
-            <div style={{ padding: '12px' }}>
-              <div style={{
-                fontSize: '12px',
-                color: '#666',
-                marginBottom: '8px',
-                fontFamily: 'monospace'
-              }}>
-                {imageId}
-              </div>
-              <div style={{ fontSize: '14px' }}>
-                {annotations.length} annotation{annotations.length > 1 ? 's' : ''}:
-                <ul style={{ margin: '4px 0 0 0', paddingLeft: '20px' }}>
-                  {annotations.map(ann => (
-                    <li key={ann.annotation_id} style={{ fontSize: '12px', marginBottom: '2px' }}>
-                      <strong>{ann.class_name}</strong> (conf: {ann.confidence?.toFixed(2)})
-                    </li>
-                  ))}
-                </ul>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

@@ -84,7 +84,6 @@ function App() {
           <ErrorBoundary>
             <ImageGrid 
               selectedData={selectedData} 
-              imageBasePath="/images" // Adjust this path based on your image server setup
             />
           </ErrorBoundary>
         </div>

@@ -11,13 +11,13 @@ const ScatterPlot = ({ onSelectionChange }) => {
   const [mouseMode, setMouseMode] = useState('lasso');
 
   useEffect(() => {
-    // Load CSV data
-    Papa.parse('/scatterplot_data.csv', {
+    // Load CMR CSV data - use limited dataset for better performance
+    Papa.parse('/cmr_scatterplot_data_limited.csv', {
       download: true,
       header: true,
       dynamicTyping: true,
       complete: (results) => {
-        console.log('Loaded data:', results.data);
+        console.log('Loaded CMR data:', results.data);
         setData(results.data);
       },
       error: (error) => {

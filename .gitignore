@@ -1,2 +1,24 @@
 *.csv
 .env
+
+# Large directories
+cmr_checkpoints/
+cmr_crops/
+cmr_crops_full/
+cmr_crops_limited/
+cmr_crops_sample/
+frontend/scatter-viewer/public/cmr_crops
+frontend/scatter-viewer/public/images/
+
+# Large files
+cmr_embeddings_limited.json
+cmr_embeddings_sample.json
+
+# Log files
+cmr_generation_*.log
+
+# Shell scripts for dataset generation
+generate_cmr_*.sh
+monitor_cmr_generation.sh
+download_images_*.sh
+example_crop_usage.sh
